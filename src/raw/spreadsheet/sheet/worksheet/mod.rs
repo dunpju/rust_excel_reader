@@ -18,6 +18,7 @@ use sheet_dimension::{load_sheet_dimension, XlsxSheetDimension};
 use std::io::{Read, Seek};
 use table_part::{load_table_parts, XlsxTableParts};
 use zip::ZipArchive;
+use sheet_view::{load_sheet_views, XlsxSheetView};
 
 use super::{drawing::XlsxDrawing, sheet_format_properties::XlsxSheetFormatProperties};
 use crate::{
@@ -125,6 +126,7 @@ pub struct XlsxWorksheet {
     // sheetPr (Sheet Properties)	§18.3.1.82
     // sheetProtection (Sheet Protection Options)	§18.3.1.85
     // sheetViews (Sheet Views)	§18.3.1.88
+    pub sheet_views: Option<Vec<XlsxSheetView>>,
     // smartTags (Smart Tags)	§18.3.1.90
     // sortState (Sort State)	§18.3.1.92
 
@@ -144,6 +146,7 @@ impl XlsxWorksheet {
             phonetic_properties: None,
             sheet_data: None,
             sheet_format_properties: None,
+            sheet_views: None,
             table_parts: None,
         };
 
@@ -187,6 +190,9 @@ impl XlsxWorksheet {
                 Ok(Event::Start(ref e)) if e.local_name().as_ref() == b"sheetFormatPr" => {
                     worksheet.sheet_format_properties = Some(XlsxSheetFormatProperties::load(e)?);
                 }
+                Ok(Event::Start(ref e)) if e.local_name().as_ref() == b"sheetViews" => {
+                    worksheet.sheet_views = Some(load_sheet_views(&mut reader)?);
+                },
                 Ok(Event::Start(ref e)) if e.local_name().as_ref() == b"tableParts" => {
                     worksheet.table_parts = Some(load_table_parts(&mut reader)?);
                 }

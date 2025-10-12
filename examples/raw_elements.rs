@@ -24,8 +24,8 @@ fn main() -> anyhow::Result<()> {
 
     // Get a specific worksheet parsed from xl/worksheets/sheet{}.xml
     // `get_raw_worksheet_with_sheet_id` function or `get_raw_worksheet` function is also available.
-    let _worksheet = excel.get_raw_worksheet_with_sheet_id(&6)?;
-
+    let worksheet = excel.get_raw_worksheet_with_sheet_id(&6)?;
+println!("worksheet: {:?}", worksheet);
     // Get all tables defined in a worksheet parsed from xl/tables/table{}.xml, ..., xl/tables/table{n}.xml
     // `get_raw_tables_for_worksheet_with_name` function or `get_raw_tables_for_worksheet` function is also available
     let _tables = excel.get_raw_tables_for_worksheet_with_sheet_id(&6)?;

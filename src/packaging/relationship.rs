@@ -99,6 +99,7 @@ pub(crate) fn load_sheet_relationships(
     Ok(relationships)
 }
 
+#[allow(unused)]
 /// get relationships of a specific drawing within a workbook
 pub(crate) fn load_drawing_relationships(
     zip: &mut ZipArchive<impl Read + Seek>,
