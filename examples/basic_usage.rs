@@ -32,10 +32,14 @@ fn main() -> anyhow::Result<()> {
     println!("--------");
     println!("--------");
 
+    // 方法2：通过ID直接获取XlsxWorksheet
+    let raw_worksheet = excel.get_raw_worksheet_with_sheet_id(&1)?;
+    println!("sheet_views: {:?}", raw_worksheet.sheet_views);
+
+
     // get worksheet detail
     let worksheet = excel.get_worksheet(&sheets[0].clone())?;
     println!("worksheet: {}", worksheet.name);
-    println!("dimension: {:?}", worksheet.dimension);
     println!("dimension: {:?}", worksheet.dimension);
     println!(
         "Use 1904 backward compatibility date system: {:?}",
