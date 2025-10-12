@@ -36,6 +36,7 @@ fn main() -> anyhow::Result<()> {
     let worksheet = excel.get_worksheet(&sheets[0].clone())?;
     println!("worksheet: {}", worksheet.name);
     println!("dimension: {:?}", worksheet.dimension);
+    println!("dimension: {:?}", worksheet.dimension);
     println!(
         "Use 1904 backward compatibility date system: {:?}",
         worksheet.is_1904

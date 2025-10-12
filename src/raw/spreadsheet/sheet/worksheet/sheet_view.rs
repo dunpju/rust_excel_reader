@@ -2,7 +2,7 @@ use anyhow::bail;
 use quick_xml::events::{BytesStart, Event};
 use std::io::Read;
 
-use crate::{excel::XmlReader, helper::{string_to_float, string_to_unsignedint, extract_val_attribute}};
+use crate::{excel::XmlReader, helper::{string_to_float, string_to_unsignedint}};
 
 
 /// https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.sheetview?view=openxml-3.0.1
@@ -34,7 +34,7 @@ pub struct XlsxSheetView {
 }
 
 impl XlsxSheetView {
-    pub(crate) fn load(reader: &mut XmlReader<impl Read>, e: &BytesStart) -> anyhow::Result<Self> {
+    pub(crate) fn load(reader: &mut XmlReader<impl Read>, _e: &BytesStart) -> anyhow::Result<Self> {
         let mut sheet_view = Self {
             pane: None,
         };
@@ -132,7 +132,8 @@ impl XlsxPane {
         // Iterate through all attributes
         for attr in e.attributes() {
             let attr = attr?;
-            let key = attr.key.local_name().as_ref();
+            let local_name = attr.key.local_name();
+            let key = local_name.as_ref();
             let value = String::from_utf8(attr.value.to_vec())?;
 
             match key {

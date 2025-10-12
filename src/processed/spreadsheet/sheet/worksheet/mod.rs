@@ -307,7 +307,7 @@ impl Worksheet {
             .map(|t| Table::from_raw(t, default_table_style_name.clone()))
             .collect();
 
-        return Self {
+        Self {
             name,
             sheet_id,
             dimension: Self::get_dimension(*worksheet.clone()),
@@ -328,7 +328,7 @@ impl Worksheet {
             drawing_rels,
             #[cfg(feature = "drawing")]
             image_bytes,
-        };
+        }
     }
 }
 
@@ -345,11 +345,11 @@ impl Worksheet {
         let Some(target_link) = target_link.first() else {
             return None;
         };
-        return Hyperlink::from_raw(
+        Hyperlink::from_raw(
             target_link.clone(),
             *self.worksheet_rels.clone(),
             *self.defined_names.clone(),
-        );
+        )
     }
 
     fn coordinate_in_range(&self, coordinate: Coordinate) -> bool {
@@ -422,7 +422,7 @@ impl Worksheet {
             });
         };
 
-        return Some(Dimension {
+        Some(Dimension {
             start: Coordinate {
                 row: min(first_row, worksheet_dimension.start.row),
                 col: min(first_col, worksheet_dimension.start.col),
@@ -431,7 +431,7 @@ impl Worksheet {
                 row: max(last_row, worksheet_dimension.end.row),
                 col: max(last_col, worksheet_dimension.end.col),
             },
-        });
+        })
     }
 
     /// get cell alignment information
@@ -461,7 +461,7 @@ impl Worksheet {
             }
         }
 
-        return None;
+        None
     }
 
     /// get protection for a cellXfs' xf_id.
@@ -494,7 +494,7 @@ impl Worksheet {
             return cell_style_format.protection;
         }
 
-        return None;
+        None
     }
 
     /// get cell alignment information
@@ -524,7 +524,7 @@ impl Worksheet {
             }
         }
 
-        return None;
+        None
     }
 
     /// get alignment for a cellXfs' xf_id.
@@ -557,7 +557,7 @@ impl Worksheet {
             return cell_style_format.alignment;
         }
 
-        return None;
+        None
     }
 
     /// get id for a cell
@@ -594,7 +594,7 @@ impl Worksheet {
             }
         }
 
-        return None;
+        None
     }
 
     /// get border id for a cellXfs' xf_id.
@@ -627,7 +627,7 @@ impl Worksheet {
             return cell_style_format.border_id;
         }
 
-        return None;
+        None
     }
 
     /// get fill id for a cellXfs' xf_id.
@@ -660,7 +660,7 @@ impl Worksheet {
             return cell_style_format.fill_id;
         }
 
-        return None;
+        None
     }
 
     /// get font id for a cellXfs' xf_id.
@@ -693,7 +693,7 @@ impl Worksheet {
             return cell_style_format.font_id;
         }
 
-        return None;
+        None
     }
 
     /// get number format id for a cellXfs' xf_id.
@@ -726,7 +726,7 @@ impl Worksheet {
             return cell_style_format.num_fmt_id;
         }
 
-        return None;
+        None
     }
 
     fn get_raw_cell(&self, coordinate: Coordinate, row: XlsxRow) -> Option<XlsxCell> {
@@ -737,7 +737,7 @@ impl Worksheet {
             .filter(|c| c.coordinate == Some(coordinate))
             .collect();
 
-        return raw_cell.first().cloned();
+        raw_cell.first().cloned()
     }
 
     fn get_raw_col_info(&self, coordinate: Coordinate) -> Option<XlsxColumnInformation> {
@@ -753,7 +753,7 @@ impl Worksheet {
             }
         }
 
-        return None;
+        None
     }
 
     fn get_raw_row(&self, coordinate: Coordinate) -> Option<XlsxRow> {
@@ -775,7 +775,7 @@ impl Worksheet {
             return None;
         };
 
-        return self.stylesheet.get_cell_format(xf_id);
+        self.stylesheet.get_cell_format(xf_id)
     }
 
     fn get_cell_style_format(&self, xf_id: u64) -> Option<XlsxCellFormat> {
@@ -783,7 +783,7 @@ impl Worksheet {
             return None;
         };
 
-        return self.stylesheet.get_cell_style_format(cell_style_format_id);
+        self.stylesheet.get_cell_style_format(cell_style_format_id)
     }
 
     fn get_color_scheme(&self) -> Option<XlsxColorScheme> {
@@ -794,6 +794,6 @@ impl Worksheet {
                 color_scheme = theme_elements.color_scheme
             }
         };
-        return color_scheme;
+        color_scheme
     }
 }
