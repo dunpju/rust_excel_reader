@@ -138,8 +138,8 @@ impl XlsxCellFormula {
 
             match reader.read_event_into(&mut buf) {
                 Ok(Event::Text(t)) => text.push_str(&t.unescape()?),
-                Ok(Event::End(ref e)) if e.local_name().as_ref() == b"v" => break,
-                Ok(Event::Eof) => bail!("unexpected end of file at `v`."),
+                Ok(Event::End(ref e)) if e.local_name().as_ref() == b"f" => break,
+                Ok(Event::Eof) => bail!("unexpected end of file at `f`."),
                 Err(e) => bail!(e.to_string()),
                 _ => (),
             }
