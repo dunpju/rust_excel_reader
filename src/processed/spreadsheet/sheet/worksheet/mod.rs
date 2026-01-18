@@ -148,9 +148,25 @@ impl Worksheet {
             return Ok(Cell::default(coordinate));
         };
 
-        let Some(cell) = self.get_raw_cell(coordinate, row.clone()) else {
+        let Some(mut cell) = self.get_raw_cell(coordinate, row.clone()) else {
             return Ok(Cell::default(coordinate));
         };
+
+        // Handle shared formula
+        if let Some(formula) = &cell.formula {
+            // Check if this is a shared formula
+            if formula.r#type == Some("shared".to_string()) {
+                // If it has a shared index, try to get the master formula
+                if let Some(shared_index) = formula.shared_group_index {
+                    if let Some(master_formula) = self.get_master_formula(shared_index) {
+                        // Create a new formula with the master formula value
+                        let mut new_formula = formula.clone();
+                        new_formula.raw_value = master_formula;
+                        cell.formula = Some(new_formula);
+                    }
+                }
+            }
+        }
 
         let color_scheme = self.get_color_scheme();
 
@@ -795,5 +811,38 @@ impl Worksheet {
             }
         };
         color_scheme
+    }
+
+    /// Get the master formula for a shared formula cell
+    fn get_master_formula(&self, shared_index: u64) -> Option<String> {
+        // Iterate through all rows and cells to find the master formula
+        let Some(sheet_data) = self.raw_sheet.clone().sheet_data else {
+            return None;
+        };
+
+        let rows = sheet_data.rows.unwrap_or(vec![]);
+        for row in rows {
+            let cells = row.cells.unwrap_or(vec![]);
+            for cell in cells {
+                let Some(formula) = cell.formula else {
+                    continue;
+                };
+                
+                // Check if this is a master formula with the same shared index
+                if formula.shared_group_index == Some(shared_index) && formula.r#type == Some("shared".to_string()) {
+                    // Check if this is the master formula (has ref attribute)
+                    if formula.ref_range.is_some() {
+                        return Some(formula.raw_value);
+                    }
+                } else if formula.shared_group_index.is_none() && formula.r#type == Some("shared".to_string()) {
+                    // This might be the master formula if it has ref attribute
+                    if formula.ref_range.is_some() {
+                        return Some(formula.raw_value);
+                    }
+                }
+            }
+        }
+
+        None
     }
 }
