@@ -158,10 +158,12 @@ impl Worksheet {
             if formula.r#type == Some("shared".to_string()) {
                 // If it has a shared index, try to get the master formula
                 if let Some(shared_index) = formula.shared_group_index {
-                    if let Some(master_formula) = self.get_master_formula(shared_index) {
-                        // Create a new formula with the master formula value
+                    if let Some((master_formula, master_coord)) = self.get_master_formula(shared_index) {
+                        // Adjust the master formula based on the relative offset between master cell and current cell
+                        let adjusted_formula = self.adjust_formula_references(&master_formula, master_coord, coordinate);
+                        // Create a new formula with the adjusted formula value
                         let mut new_formula = formula.clone();
-                        new_formula.raw_value = master_formula;
+                        new_formula.raw_value = adjusted_formula;
                         cell.formula = Some(new_formula);
                     }
                 }
@@ -813,8 +815,8 @@ impl Worksheet {
         color_scheme
     }
 
-    /// Get the master formula for a shared formula cell
-    fn get_master_formula(&self, shared_index: u64) -> Option<String> {
+    /// Get the master formula and its coordinate for a shared formula cell
+    fn get_master_formula(&self, shared_index: u64) -> Option<(String, Coordinate)> {
         // Iterate through all rows and cells to find the master formula
         let Some(sheet_data) = self.raw_sheet.clone().sheet_data else {
             return None;
@@ -832,17 +834,117 @@ impl Worksheet {
                 if formula.shared_group_index == Some(shared_index) && formula.r#type == Some("shared".to_string()) {
                     // Check if this is the master formula (has ref attribute)
                     if formula.ref_range.is_some() {
-                        return Some(formula.raw_value);
+                        if let Some(coordinate) = cell.coordinate {
+                            return Some((formula.raw_value, coordinate));
+                        }
                     }
                 } else if formula.shared_group_index.is_none() && formula.r#type == Some("shared".to_string()) {
                     // This might be the master formula if it has ref attribute
                     if formula.ref_range.is_some() {
-                        return Some(formula.raw_value);
+                        if let Some(coordinate) = cell.coordinate {
+                            return Some((formula.raw_value, coordinate));
+                        }
                     }
                 }
             }
         }
 
         None
+    }
+
+    /// Adjust cell references in a formula based on the relative offset between master cell and current cell
+    fn adjust_formula_references(&self, formula: &str, master_coord: Coordinate, current_coord: Coordinate) -> String {
+        // Calculate offset between master cell and current cell
+        let row_offset = current_coord.row - master_coord.row;
+        let col_offset = current_coord.col - master_coord.col;
+        
+        // If no offset, return the original formula
+        if row_offset == 0 && col_offset == 0 {
+            return formula.to_string();
+        }
+        
+        // Regular expression to match cell references (e.g., A1, $A$1, A$1, $A1)
+        let re = regex::Regex::new(r#"([$]?[A-Za-z]+)([$]?[0-9]+)"#).unwrap();
+        
+        // Replace all cell references with adjusted ones
+        let adjusted_formula = re.replace_all(formula, |caps: &regex::Captures| {
+            let col_str = &caps[1];
+            let row_str = &caps[2];
+            
+            // Check if column is absolute (has $ prefix)
+            let is_col_absolute = col_str.starts_with('$');
+            let col_letter = if is_col_absolute {
+                &col_str[1..]
+            } else {
+                col_str
+            };
+            
+            // Check if row is absolute (has $ prefix)
+            let is_row_absolute = row_str.starts_with('$');
+            let row_num = if is_row_absolute {
+                &row_str[1..]
+            } else {
+                row_str
+            };
+            
+            // Convert column letter to number
+            let col_num = self.col_letter_to_number(col_letter);
+            // Convert row string to number
+            let row_num: u64 = row_num.parse().unwrap_or(0);
+            
+            // Adjust column if not absolute
+            let new_col_num = if is_col_absolute {
+                col_num
+            } else {
+                col_num + col_offset
+            };
+            
+            // Adjust row if not absolute
+            let new_row_num = if is_row_absolute {
+                row_num
+            } else {
+                row_num + row_offset
+            };
+            
+            // Convert new column number to letter
+            let new_col_letter = self.col_number_to_letter(new_col_num);
+            
+            // Reconstruct the cell reference with $ prefix if needed
+            let mut new_ref = String::new();
+            if is_col_absolute {
+                new_ref.push('$');
+            }
+            new_ref.push_str(&new_col_letter);
+            if is_row_absolute {
+                new_ref.push('$');
+            }
+            new_ref.push_str(&new_row_num.to_string());
+            
+            new_ref
+        });
+        
+        adjusted_formula.to_string()
+    }
+    
+    /// Convert column letter to number (A=1, B=2, ..., Z=26, AA=27, etc.)
+    fn col_letter_to_number(&self, col: &str) -> u64 {
+        let mut result = 0;
+        for c in col.chars() {
+            result = result * 26 + (c.to_ascii_uppercase() as u64 - 'A' as u64 + 1);
+        }
+        result
+    }
+    
+    /// Convert column number to letter (1=A, 2=B, ..., 26=Z, 27=AA, etc.)
+    fn col_number_to_letter(&self, mut num: u64) -> String {
+        let mut result = String::new();
+        
+        while num > 0 {
+            let remainder = (num - 1) % 26;
+            result.push((b'A' + remainder as u8) as char);
+            num = (num - 1) / 26;
+        }
+        
+        result.chars().rev().collect()
     }
 }
