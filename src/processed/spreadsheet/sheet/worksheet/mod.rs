@@ -1,5 +1,6 @@
 pub mod calculation_reference;
 pub mod cell;
+pub mod data_validation;
 pub mod table;
 
 #[cfg(feature = "serde")]
@@ -24,6 +25,7 @@ use crate::raw::drawing::worksheet_drawing::{XlsxWorksheetDrawing, XlsxWorksheet
 
 use calculation_reference::CalculationReferenceMode;
 use cell::{cell_property::CellProperty, cell_value::CellValueType, Cell};
+use data_validation::DataValidation;
 use table::Table;
 
 use crate::{
@@ -63,6 +65,9 @@ pub struct Worksheet {
     pub merged_cells: Vec<Dimension>,
 
     pub tables: Vec<Table>,
+
+    /// Data validation rules applied to cells in this worksheet.
+    pub data_validations: Option<Vec<DataValidation>>,
 
     /// Value that indicates whether to use a 1900 or 1904 date base when converting serial values in the workbook to dates.
     ///
@@ -325,12 +330,20 @@ impl Worksheet {
             .map(|t| Table::from_raw(t, default_table_style_name.clone()))
             .collect();
 
+        // Process data validations
+        let data_validations = worksheet.data_validations.as_ref().map(|raw| {
+            raw.data_validations.iter()
+                .map(|dv| DataValidation::from_raw(dv.clone()))
+                .collect()
+        });
+
         Self {
             name,
             sheet_id,
             dimension: Self::get_dimension(*worksheet.clone()),
             merged_cells: worksheet.merge_cells.clone().unwrap_or(vec![]),
             tables,
+            data_validations,
             is_1904,
             calculation_reference_mode: calculation_reference_mode
                 .unwrap_or(CalculationReferenceMode::default()),

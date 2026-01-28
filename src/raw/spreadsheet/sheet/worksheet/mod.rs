@@ -1,5 +1,6 @@
 pub mod cell;
 pub mod column_information;
+pub mod data_validation;
 pub mod hyperlink;
 pub mod merge_cell;
 pub mod row;
@@ -10,6 +11,7 @@ pub mod table_part;
 
 use anyhow::bail;
 use column_information::{load_column_infos, XlsxColumnInformations};
+use data_validation::XlsxDataValidations;
 use hyperlink::{load_hyperlinks, XlsxHyperlinks};
 use merge_cell::{load_merge_cells, XlsxMergeCells};
 use quick_xml::events::Event;
@@ -87,6 +89,7 @@ pub struct XlsxWorksheet {
     // customSheetViews (Custom Sheet Views)	§18.3.1.27
     // dataConsolidate (Data Consolidate)	§18.3.1.29
     // dataValidations (Data Validations)	§18.3.1.33
+    pub data_validations: Option<XlsxDataValidations>,
 
     // dimension (Worksheet Dimensions)
     pub dimension: Option<XlsxSheetDimension>,
@@ -139,6 +142,7 @@ impl XlsxWorksheet {
         let mut worksheet = Self {
             auto_filter: None,
             column_infos: None,
+            data_validations: None,
             dimension: None,
             drawing: None,
             hyperlinks: None,
@@ -168,6 +172,9 @@ impl XlsxWorksheet {
                 }
                 Ok(Event::Start(ref e)) if e.local_name().as_ref() == b"cols" => {
                     worksheet.column_infos = Some(load_column_infos(&mut reader)?);
+                }
+                Ok(Event::Start(ref e)) if e.local_name().as_ref() == b"dataValidations" => {
+                    worksheet.data_validations = Some(XlsxDataValidations::load(&mut reader)?);
                 }
                 Ok(Event::Start(ref e)) if e.local_name().as_ref() == b"dimension" => {
                     worksheet.dimension = load_sheet_dimension(e)?;
