@@ -57,12 +57,12 @@ pub struct PhoneticProperties {
 impl PhoneticProperties {
     pub(crate) fn from_raw(
         properties: XlsxPhoneticProperties,
-        stylesheet: XlsxStyleSheet,
+        stylesheet: &XlsxStyleSheet,
         color_scheme: Option<XlsxColorScheme>,
     ) -> Self {
         let font_id = properties.font_id.unwrap_or(0).try_into().unwrap_or(0);
         let raw_font = stylesheet.get_font(font_id);
-        let font = Font::from_raw_font(raw_font, stylesheet.colors, color_scheme);
+        let font = Font::from_raw_font(raw_font, stylesheet.colors.clone(), color_scheme);
 
         return Self {
             alignment: PhoneticAlignmentValue::from_string(properties.alignment),

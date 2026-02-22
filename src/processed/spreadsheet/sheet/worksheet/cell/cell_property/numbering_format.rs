@@ -24,7 +24,7 @@ impl NumberingFormat {
         };
     }
 
-    pub(crate) fn from_id(num_format_id: Option<u64>, stylesheet: XlsxStyleSheet) -> Self {
+    pub(crate) fn from_id(num_format_id: Option<u64>, stylesheet: &XlsxStyleSheet) -> Self {
         let Some(num_format_id) = num_format_id else {
             return Self::default();
         };

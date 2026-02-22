@@ -10,8 +10,10 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 
 use anyhow::bail;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use std::{
     cmp::{max, min},
+    time::Instant,
     u64,
 };
 
@@ -53,7 +55,7 @@ use crate::{
     },
 };
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize))]
 pub struct Worksheet {
     pub name: String,
@@ -110,31 +112,54 @@ pub struct Worksheet {
     #[cfg(feature = "drawing")]
     #[cfg_attr(feature = "serde", serde(skip_serializing))]
     image_bytes: Box<BTreeMap<String, Vec<u8>>>,
+
+    // Cache for master formulas to avoid repeated lookups
+    #[cfg_attr(feature = "serde", serde(skip_serializing))]
+    master_formula_cache: std::sync::Arc<std::sync::RwLock<std::collections::HashMap<u64, (String, Coordinate)>>>,
+
+    // Cache for regex to avoid repeated creation
+    #[cfg_attr(feature = "serde", serde(skip_serializing))]
+    formula_regex: regex::Regex,
 }
 
 impl Worksheet {
     /// get all cells within a worksheet.
     pub fn get_cells(&self) -> anyhow::Result<Vec<Cell>> {
-        let mut cells: Vec<Cell> = vec![];
-
         let Some(dimension) = self.dimension else {
-            return Ok(cells);
+            return Ok(vec![]);
         };
 
         let (start, end) = (dimension.start, dimension.end);
-        let mut row_index = start.row;
-
-        while row_index <= end.row {
-            let mut col_index = start.col;
-            while col_index <= end.col {
-                let cell = self.get_cell(Coordinate::from_point((row_index, col_index)))?;
-                cells.push(cell);
-                col_index += 1;
-            }
-            row_index += 1;
+        
+        // Calculate total number of cells for progress reporting
+        let total_rows = end.row - start.row + 1;
+        let total_cols = end.col - start.col + 1;
+        let total_cells = total_rows * total_cols;
+        println!("Total cells to process: {}", total_cells);
+        
+        // Process rows in parallel
+        let start_time = Instant::now();
+        let cells: anyhow::Result<Vec<Cell>> = (start.row..=end.row)
+            .into_par_iter()
+            .flat_map(|row_index| {
+                let mut row_results = Vec::with_capacity(total_cols as usize);
+                let mut col_index = start.col;
+                while col_index <= end.col {
+                    let coord = Coordinate::from_point((row_index, col_index));
+                    row_results.push(self.get_cell(coord));
+                    col_index += 1;
+                }
+                row_results
+            })
+            .collect();
+        
+        // Print result
+        if let Ok(ref cells_vec) = cells {
+            let elapsed = start_time.elapsed();
+            println!("Processed {} cells successfully in {:?}", cells_vec.len(), elapsed);
         }
-
-        Ok(cells)
+        
+        cells
     }
 
     /// get cell value and styles for a specific coordinate.
@@ -153,9 +178,10 @@ impl Worksheet {
             return Ok(Cell::default(coordinate));
         };
 
-        let Some(mut cell) = self.get_raw_cell(coordinate, row.clone()) else {
+        let Some(cell) = self.get_raw_cell(coordinate, &row) else {
             return Ok(Cell::default(coordinate));
         };
+        let mut cell = cell.clone();
 
         // Handle shared formula
         if let Some(formula) = &cell.formula {
@@ -175,17 +201,52 @@ impl Worksheet {
             }
         }
 
+        // Get color scheme once
         let color_scheme = self.get_color_scheme();
-
+        // Get column info once
         let col = self.get_raw_col_info(coordinate);
 
+        // Use references instead of cloning for large objects
         let cell_value = CellValueType::from_raw(
             cell.clone(),
-            *self.shared_string_items.clone(),
-            *self.stylesheet.clone(),
+            &self.shared_string_items, // Use reference instead of dereference
+            &self.stylesheet,          // Use reference instead of dereference
             color_scheme.clone(),
         )?;
 
+        // Get all styles in one pass
+        let (num_format_id, fill_id, border_id, font_id, alignment, protection) = self.get_cell_styles(&cell, &row, &col);
+
+        // Get hyperlink once
+        let hyperlink = self.get_hyperlink(coordinate);
+        // Get sheet format properties once
+        let sheet_format_properties = self.raw_sheet.sheet_format_properties.clone();
+
+        let cell_property = CellProperty::from_raw(
+            cell,                      // No clone needed
+            row,                       // No clone needed
+            col,                       // No clone needed
+            fill_id,
+            font_id,
+            border_id,
+            num_format_id,
+            alignment,
+            protection,
+            hyperlink,
+            sheet_format_properties,
+            &self.stylesheet,          // Use reference instead of dereference
+            color_scheme,              // No clone needed
+        );
+
+        Ok(Cell {
+            coordinate,
+            value: cell_value,
+            property: cell_property,
+        })
+    }
+
+    /// Get all cell styles in one pass to reduce redundant calculations
+    fn get_cell_styles(&self, cell: &XlsxCell, row: &XlsxRow, col: &Option<XlsxColumnInformation>) -> (Option<u64>, Option<u64>, Option<u64>, Option<u64>, Option<XlsxAlignment>, Option<XlsxCellProtection>) {
         let num_format_id = self.get_id(cell.clone(), row.clone(), col.clone(), &|x| {
             self.get_number_format_id_helper(x)
         });
@@ -201,27 +262,7 @@ impl Worksheet {
         let alignment = self.get_alignment(cell.clone(), row.clone(), col.clone());
         let protection = self.get_protection(cell.clone(), row.clone(), col.clone());
 
-        let cell_property = CellProperty::from_raw(
-            cell.clone(),
-            row.clone(),
-            col.clone(),
-            fill_id,
-            font_id,
-            border_id,
-            num_format_id,
-            alignment,
-            protection,
-            self.get_hyperlink(coordinate),
-            (*self.raw_sheet).sheet_format_properties.clone(),
-            *self.stylesheet.clone(),
-            color_scheme.clone(),
-        );
-
-        Ok(Cell {
-            coordinate,
-            value: cell_value,
-            property: cell_property,
-        })
+        (num_format_id, fill_id, border_id, font_id, alignment, protection)
     }
 
     /// get all drawings within a worksheet.
@@ -359,6 +400,9 @@ impl Worksheet {
             drawing_rels,
             #[cfg(feature = "drawing")]
             image_bytes,
+            // Initialize caches
+            master_formula_cache: std::sync::Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),
+            formula_regex: regex::Regex::new(r#"([$]?[A-Za-z]+)([$]?[0-9]+)"#).unwrap(),
         }
     }
 }
@@ -760,8 +804,8 @@ impl Worksheet {
         None
     }
 
-    fn get_raw_cell(&self, coordinate: Coordinate, row: XlsxRow) -> Option<XlsxCell> {
-        let cells = row.cells.unwrap_or(vec![]);
+    fn get_raw_cell(&self, coordinate: Coordinate, row: &XlsxRow) -> Option<XlsxCell> {
+        let cells = row.cells.clone().unwrap_or(vec![]);
 
         let raw_cell: Vec<XlsxCell> = cells
             .into_iter()
@@ -772,7 +816,10 @@ impl Worksheet {
     }
 
     fn get_raw_col_info(&self, coordinate: Coordinate) -> Option<XlsxColumnInformation> {
-        let cols = self.raw_sheet.column_infos.clone().unwrap_or(vec![]);
+        let cols = match self.raw_sheet.column_infos.as_ref() {
+            Some(cols) => cols,
+            None => &vec![]
+        };
 
         let col_coordintae = coordinate.col;
 
@@ -780,7 +827,7 @@ impl Worksheet {
             let min = col.min_column.unwrap_or(u64::MIN);
             let max = col.max_column.unwrap_or(u64::MAX);
             if (min..=max).contains(&col_coordintae) {
-                return Some(col);
+                return Some(col.clone());
             }
         }
 
@@ -788,17 +835,20 @@ impl Worksheet {
     }
 
     fn get_raw_row(&self, coordinate: Coordinate) -> Option<XlsxRow> {
-        let Some(sheet_data) = self.raw_sheet.clone().sheet_data else {
+        let Some(sheet_data) = self.raw_sheet.sheet_data.as_ref() else {
             return None;
         };
 
-        let rows = sheet_data.rows.unwrap_or(vec![]);
-        let row: Vec<XlsxRow> = rows
-            .into_iter()
+        let rows = match sheet_data.rows.as_ref() {
+            Some(rows) => rows,
+            None => &vec![]
+        };
+        let row: Vec<&XlsxRow> = rows
+            .iter()
             .filter(|r| r.row_index == Some(coordinate.row))
             .collect();
 
-        return row.first().cloned();
+        return row.first().cloned().cloned();
     }
 
     fn get_cell_format(&self, xf_id: u64) -> Option<XlsxCellFormat> {
@@ -830,16 +880,30 @@ impl Worksheet {
 
     /// Get the master formula and its coordinate for a shared formula cell
     fn get_master_formula(&self, shared_index: u64) -> Option<(String, Coordinate)> {
+        // Check cache first
+        {{
+            let cache = self.master_formula_cache.read().unwrap();
+            if let Some(cached) = cache.get(&shared_index) {
+                return Some(cached.clone());
+            }
+        }}
+
         // Iterate through all rows and cells to find the master formula
-        let Some(sheet_data) = self.raw_sheet.clone().sheet_data else {
+        let Some(sheet_data) = self.raw_sheet.sheet_data.as_ref() else {
             return None;
         };
 
-        let rows = sheet_data.rows.unwrap_or(vec![]);
+        let rows = match sheet_data.rows.as_ref() {
+            Some(rows) => rows,
+            None => &vec![]
+        };
         for row in rows {
-            let cells = row.cells.unwrap_or(vec![]);
+            let cells = match row.cells.as_ref() {
+                Some(cells) => cells,
+                None => &vec![]
+            };
             for cell in cells {
-                let Some(formula) = cell.formula else {
+                let Some(formula) = cell.formula.as_ref() else {
                     continue;
                 };
                 
@@ -848,14 +912,22 @@ impl Worksheet {
                     // Check if this is the master formula (has ref attribute)
                     if formula.ref_range.is_some() {
                         if let Some(coordinate) = cell.coordinate {
-                            return Some((formula.raw_value, coordinate));
+                            let result = (formula.raw_value.clone(), coordinate);
+                            // Update cache
+                            let mut cache = self.master_formula_cache.write().unwrap();
+                            cache.insert(shared_index, result.clone());
+                            return Some(result);
                         }
                     }
                 } else if formula.shared_group_index.is_none() && formula.r#type == Some("shared".to_string()) {
                     // This might be the master formula if it has ref attribute
                     if formula.ref_range.is_some() {
                         if let Some(coordinate) = cell.coordinate {
-                            return Some((formula.raw_value, coordinate));
+                            let result = (formula.raw_value.clone(), coordinate);
+                            // Update cache
+                            let mut cache = self.master_formula_cache.write().unwrap();
+                            cache.insert(shared_index, result.clone());
+                            return Some(result);
                         }
                     }
                 }
@@ -876,11 +948,9 @@ impl Worksheet {
             return formula.to_string();
         }
         
-        // Regular expression to match cell references (e.g., A1, $A$1, A$1, $A1)
-        let re = regex::Regex::new(r#"([$]?[A-Za-z]+)([$]?[0-9]+)"#).unwrap();
-        
+        // Use cached regex instead of creating a new one
         // Replace all cell references with adjusted ones
-        let adjusted_formula = re.replace_all(formula, |caps: &regex::Captures| {
+        let adjusted_formula = self.formula_regex.replace_all(formula, |caps: &regex::Captures| {
             let col_str = &caps[1];
             let row_str = &caps[2];
             

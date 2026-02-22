@@ -59,8 +59,8 @@ pub enum CellValueType {
 impl CellValueType {
     pub(crate) fn from_raw(
         cell: XlsxCell,
-        shared_string_items: Vec<XlsxSharedStringItem>,
-        stylesheet: XlsxStyleSheet,
+        shared_string_items: &Vec<XlsxSharedStringItem>,
+        stylesheet: &XlsxStyleSheet,
         color_scheme: Option<XlsxColorScheme>,
     ) -> anyhow::Result<Self> {
         if cell.formula.is_none() && cell.inline_string.is_none() && cell.cell_value.is_none() {
@@ -69,7 +69,7 @@ impl CellValueType {
 
         // inline string
         if let Some(is) = cell.inline_string {
-            return Self::from_string_item(is, stylesheet.clone(), color_scheme.clone());
+            return Self::from_string_item(is, stylesheet, color_scheme.clone());
         }
 
         // formula
@@ -105,7 +105,7 @@ impl CellValueType {
                         bail!("Shared string index out of range.")
                     }
                     let string_item = shared_string_items[index].clone();
-                    Self::from_string_item(string_item, stylesheet.clone(), color_scheme.clone())
+                    Self::from_string_item(string_item, stylesheet, color_scheme.clone())
                 }
                 // formula string
                 "str" => bail!("cell has type str (formula) without <f> elements"),
@@ -122,7 +122,7 @@ impl CellValueType {
 
     fn from_string_item(
         string_item: XlsxStringItem,
-        stylesheet: XlsxStyleSheet,
+        stylesheet: &XlsxStyleSheet,
         color_scheme: Option<XlsxColorScheme>,
     ) -> anyhow::Result<Self> {
         let phonetic_runs: Option<Vec<PhoneticRun>> =
@@ -144,11 +144,11 @@ impl CellValueType {
             };
 
         let mut phonetic_properties: Option<PhoneticProperties> = None;
-        if phonetic_runs.is_some() && !phonetic_runs.clone().unwrap().is_empty() {
+        if phonetic_runs.is_some() && !phonetic_runs.as_ref().unwrap().is_empty() {
             if let Some(ph_pr) = string_item.phonetic_properties {
                 phonetic_properties = Some(PhoneticProperties::from_raw(
                     ph_pr,
-                    stylesheet.clone(),
+                    stylesheet,
                     color_scheme.clone(),
                 ))
             }
@@ -176,7 +176,7 @@ impl CellValueType {
                 };
                 let font = Font::from_raw_run_properties(
                     raw_run.run_properties,
-                    stylesheet.clone().colors,
+                    stylesheet.colors.clone(),
                     color_scheme.clone(),
                 );
                 runs.push(RichTextRun { font, text: t });

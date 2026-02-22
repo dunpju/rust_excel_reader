@@ -102,7 +102,7 @@ impl CellProperty {
         protection: Option<XlsxCellProtection>,
         hyperlink: Option<Hyperlink>,
         sheet_format_properties: Option<XlsxSheetFormatProperties>,
-        stylesheet: XlsxStyleSheet,
+        stylesheet: &XlsxStyleSheet,
         color_scheme: Option<XlsxColorScheme>,
     ) -> Self {
         let show_phonetic = Self::show_phonetic(cell.clone(), col_info.clone(), row_info.clone());
@@ -116,9 +116,9 @@ impl CellProperty {
             sheet_format_properties.clone(),
         );
 
-        let fill = Self::get_fill(fill_id, stylesheet.clone(), color_scheme.clone());
-        let font = Self::get_font(font_id, stylesheet.clone(), color_scheme.clone());
-        let border = Self::get_border(border_id, stylesheet.clone(), color_scheme.clone());
+        let fill = Self::get_fill(fill_id, stylesheet, color_scheme.clone());
+        let font = Self::get_font(font_id, stylesheet, color_scheme.clone());
+        let border = Self::get_border(border_id, stylesheet, color_scheme.clone());
 
         return Self {
             width,
@@ -132,7 +132,7 @@ impl CellProperty {
             font,
             border,
             fill,
-            numbering_format: NumberingFormat::from_id(numbering_format_id, stylesheet.clone()),
+            numbering_format: NumberingFormat::from_id(numbering_format_id, stylesheet),
         };
     }
 
@@ -163,7 +163,7 @@ impl CellProperty {
 
     fn get_font(
         font_id: Option<u64>,
-        stylesheet: XlsxStyleSheet,
+        stylesheet: &XlsxStyleSheet,
         color_scheme: Option<XlsxColorScheme>,
     ) -> Font {
         if let Some(id) = font_id {
@@ -178,7 +178,7 @@ impl CellProperty {
 
     fn get_border(
         border_id: Option<u64>,
-        stylesheet: XlsxStyleSheet,
+        stylesheet: &XlsxStyleSheet,
         color_scheme: Option<XlsxColorScheme>,
     ) -> Border {
         if let Some(id) = border_id {
@@ -193,7 +193,7 @@ impl CellProperty {
 
     fn get_fill(
         fill_id: Option<u64>,
-        stylesheet: XlsxStyleSheet,
+        stylesheet: &XlsxStyleSheet,
         color_scheme: Option<XlsxColorScheme>,
     ) -> Fill {
         if let Some(id) = fill_id {
