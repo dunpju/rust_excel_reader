@@ -247,20 +247,20 @@ impl Worksheet {
 
     /// Get all cell styles in one pass to reduce redundant calculations
     fn get_cell_styles(&self, cell: &XlsxCell, row: &XlsxRow, col: &Option<XlsxColumnInformation>) -> (Option<u64>, Option<u64>, Option<u64>, Option<u64>, Option<XlsxAlignment>, Option<XlsxCellProtection>) {
-        let num_format_id = self.get_id(cell.clone(), row.clone(), col.clone(), &|x| {
+        let num_format_id = self.get_id(cell, row, col, &|x| {
             self.get_number_format_id_helper(x)
         });
-        let fill_id = self.get_id(cell.clone(), row.clone(), col.clone(), &|x| {
+        let fill_id = self.get_id(cell, row, col, &|x| {
             self.get_fill_id_helper(x)
         });
-        let border_id = self.get_id(cell.clone(), row.clone(), col.clone(), &|x| {
+        let border_id = self.get_id(cell, row, col, &|x| {
             self.get_border_id_helper(x)
         });
-        let font_id = self.get_id(cell.clone(), row.clone(), col.clone(), &|x| {
+        let font_id = self.get_id(cell, row, col, &|x| {
             self.get_font_id_helper(x)
         });
-        let alignment = self.get_alignment(cell.clone(), row.clone(), col.clone());
-        let protection = self.get_protection(cell.clone(), row.clone(), col.clone());
+        let alignment = self.get_alignment(cell, row, col);
+        let protection = self.get_protection(cell, row, col);
 
         (num_format_id, fill_id, border_id, font_id, alignment, protection)
     }
@@ -409,21 +409,24 @@ impl Worksheet {
 
 impl Worksheet {
     fn get_hyperlink(&self, cell_coordinate: Coordinate) -> Option<Hyperlink> {
-        let hyperlinks = self.raw_sheet.hyperlinks.clone().unwrap_or(vec![]);
+        let hyperlinks = match self.raw_sheet.hyperlinks.as_ref() {
+            Some(hyperlinks) => hyperlinks,
+            None => &vec![]
+        };
         if hyperlinks.is_empty() {
             return None;
         }
-        let target_link: Vec<XlsxHyperlink> = hyperlinks
-            .into_iter()
+        let target_link: Vec<&XlsxHyperlink> = hyperlinks
+            .iter()
             .filter(|h| h.r#ref == Some(cell_coordinate))
             .collect();
         let Some(target_link) = target_link.first() else {
             return None;
         };
         Hyperlink::from_raw(
-            target_link.clone(),
-            *self.worksheet_rels.clone(),
-            *self.defined_names.clone(),
+            (*target_link).clone(),
+            &self.worksheet_rels,
+            &self.defined_names,
         )
     }
 
@@ -512,9 +515,9 @@ impl Worksheet {
     /// get cell alignment information
     fn get_protection(
         &self,
-        cell: XlsxCell,
-        row_info: XlsxRow,
-        col_info: Option<XlsxColumnInformation>,
+        cell: &XlsxCell,
+        row_info: &XlsxRow,
+        col_info: &Option<XlsxColumnInformation>,
     ) -> Option<XlsxCellProtection> {
         if let Some(n) = cell.style {
             if let Some(protection) = self.get_protection_helper(n) {
@@ -575,9 +578,9 @@ impl Worksheet {
     /// get cell alignment information
     fn get_alignment(
         &self,
-        cell: XlsxCell,
-        row_info: XlsxRow,
-        col_info: Option<XlsxColumnInformation>,
+        cell: &XlsxCell,
+        row_info: &XlsxRow,
+        col_info: &Option<XlsxColumnInformation>,
     ) -> Option<XlsxAlignment> {
         if let Some(n) = cell.style {
             if let Some(alignment) = self.get_alignment_helper(n) {
@@ -644,9 +647,9 @@ impl Worksheet {
     /// * `get_number_format_id_helper`
     fn get_id(
         &self,
-        cell: XlsxCell,
-        row_info: XlsxRow,
-        col_info: Option<XlsxColumnInformation>,
+        cell: &XlsxCell,
+        row_info: &XlsxRow,
+        col_info: &Option<XlsxColumnInformation>,
         helper_function: &dyn Fn(u64) -> Option<u64>,
     ) -> Option<u64> {
         if let Some(n) = cell.style {
@@ -805,14 +808,17 @@ impl Worksheet {
     }
 
     fn get_raw_cell(&self, coordinate: Coordinate, row: &XlsxRow) -> Option<XlsxCell> {
-        let cells = row.cells.clone().unwrap_or(vec![]);
+        let cells = match row.cells.as_ref() {
+            Some(cells) => cells,
+            None => &vec![]
+        };
 
-        let raw_cell: Vec<XlsxCell> = cells
-            .into_iter()
+        let raw_cell: Vec<&XlsxCell> = cells
+            .iter()
             .filter(|c| c.coordinate == Some(coordinate))
             .collect();
 
-        raw_cell.first().cloned()
+        raw_cell.first().cloned().cloned()
     }
 
     fn get_raw_col_info(&self, coordinate: Coordinate) -> Option<XlsxColumnInformation> {
@@ -870,9 +876,9 @@ impl Worksheet {
     fn get_color_scheme(&self) -> Option<XlsxColorScheme> {
         let mut color_scheme: Option<XlsxColorScheme> = None;
 
-        if let Some(theme) = self.theme.clone() {
-            if let Some(theme_elements) = theme.theme_elements {
-                color_scheme = theme_elements.color_scheme
+        if let Some(theme) = &self.theme {
+            if let Some(theme_elements) = &theme.theme_elements {
+                color_scheme = theme_elements.color_scheme.clone()
             }
         };
         color_scheme

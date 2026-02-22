@@ -28,14 +28,14 @@ impl Hyperlink {
     /// worksheet_rel: (r_id: Target)
     pub(crate) fn from_raw(
         hyperlink: XlsxHyperlink,
-        worksheet_rels: XlsxRelationships,
-        defined_names: XlsxDefinedNames,
+        worksheet_rels: &XlsxRelationships,
+        defined_names: &XlsxDefinedNames,
     ) -> Option<Self> {
         if let Some(r_id) = hyperlink.r_id {
             // if let Some(v) = worksheet_rels.get(&r_id) {
             //     return Some(Self::External(ExternalHyperlink::from_string(v)));
             // }
-            if let Some(v) = raw_target_for_id(&worksheet_rels.clone(), &r_id) {
+            if let Some(v) = raw_target_for_id(worksheet_rels, &r_id) {
                 return Some(Self::External(ExternalHyperlink::from_string(&v)));
             }
         }
@@ -43,8 +43,9 @@ impl Hyperlink {
         if let Some(location) = hyperlink.location {
             // defined names
             let target_name: XlsxDefinedNames = defined_names
-                .into_iter()
+                .iter()
                 .filter(|n| n.name == Some(location.clone()) && n.value.is_some())
+                .cloned()
                 .collect();
 
             if let Some(target_name) = target_name.first() {

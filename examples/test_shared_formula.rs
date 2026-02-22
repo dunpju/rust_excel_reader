@@ -3,7 +3,7 @@ use excel_reader::common_types::Coordinate;
 
 fn main() -> anyhow::Result<()> {
     // Open the Excel file using raw string for path
-    let mut excel = Excel::from_path(r"E:\share\tauri-excel\1.xlsx")?;
+    let mut excel = Excel::from_path(r"E:\share\tauri-excel\template.xlsx")?;
     
     // Get all sheets
     let sheets = excel.get_sheets()?;
